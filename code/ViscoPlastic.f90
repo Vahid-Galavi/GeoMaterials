@@ -107,70 +107,16 @@ integer, parameter:: NSTATS = STVAR_INITIALIZATION
 
 contains
 
-!-----------------------------------------------------------------------------------------------------------------------------------
-#ifdef IN_DEBUG
-subroutine ElasticViscoPlastic( IDTask, isUndr,               &
-                                    iStep, iTer, iEl, intPt,      &
-                                    Time0, dTimeI,                &
-                                    PropsI, SigI0, Swp0, stVarI0, &
-                                    dEpsI, D, BulkW,              &
-                                    Sig, Swp, stVar, ipl,         &
-                                    nStat,                        &
-                                    NonSym, iStrsDep, iTimeDep, iTang, &
-                                    iAbort )
-
-implicit none
-integer, intent(in):: IDTask, isUndr, iStep, iTer, iEl, intPt
-integer, intent(inout):: nStat
-integer, intent(out)::  ipl, nonSym, iStrsDep, iTimeDep, iTang, iAbort
-double precision, intent(in):: swp0, Time0, dTimeI
-double precision, intent(inout):: swp, BulkW
-double precision, intent(in):: propsI(NPARAMS), sigI0(*), dEpsI(*)
-double precision, intent(inout):: sig(*), stVar(NSTATS), D(N_STRESS_VECTOR,N_STRESS_VECTOR), stVarI0(NSTATS)
-double precision:: props(NPARAMS), stVar0(NSTATS), dEps(N_STRESS_VECTOR), sig0(N_STRESS_VECTOR)
-
-props = (/100000.000000000e0      ,  0.300000000000000e0      ,  0.000000000000000E+000 ,   25.0000000000000e0      ,   25.0000000000000e0      ,  0.000000000000000E+000 ,   2.00000000000000      ,  0.000000000000000E+000/)
-
-stVar0 = (/ 0.000000000000000E+000 ,   6.00000000000000      ,  -22.4109105310250      ,   1.00000000000000 /)
-
-dEps = (/ 1.253547187174091E-002 ,  9.753484976574476E-003 ,  1.521177880296275E-004 ,  1.910702769386128E-002 ,  0.000000000000000E+000 ,  0.000000000000000E+000 /)
-
-sig0 = (/ 2.515883959809619E-013 ,  2.031589549055022E-013 ,  0.000000000000000E+000 ,  1.688022977312425E-013 ,  0.000000000000000E+000 ,  0.000000000000000E+000 /)
-
-call ElasticViscoPlastic_I(IDTask, isUndr,                    &
+!---------------------------------------------------------------------------------------------------------
+subroutine ElasticViscoPlastic(IDTask, isUndr,                    &
                                iStep, iTer, iEl, intPt,           &
                                Time0, dTimeI,                     &
-                               Props, Sig0, Swp0, stVar0,         &
+                               PropsI, SigI0, Swp0, stVar0,       &
                                dEps, D, BulkW,                    &
                                Sig, Swp, stVar, ipl,              &
                                nStat,                             &
                                NonSym, iStrsDep, iTimeDep, iTang, &
                                iAbort )
-
-end subroutine ElasticViscoPlastic_Temp
-
-!--------------------------------------------------------------------------------------------------
-subroutine ElasticViscoPlastic_I(IDTask, isUndr,                    &
-                                     iStep, iTer, iEl, intPt,           &
-                                     Time0, dTimeI,                     &
-                                     PropsI, SigI0, Swp0, stVar0,       &
-                                     dEps, D, BulkW,                    &
-                                     Sig, Swp, stVar, ipl,              &
-                                     nStat,                             &
-                                     NonSym, iStrsDep, iTimeDep, iTang, &
-                                     iAbort )
-
-#else
-subroutine ElasticViscoPlastic(IDTask, isUndr,                    &
-                                   iStep, iTer, iEl, intPt,           &
-                                   Time0, dTimeI,                     &
-                                   PropsI, SigI0, Swp0, stVar0,       &
-                                   dEps, D, BulkW,                    &
-                                   Sig, Swp, stVar, ipl,              &
-                                   nStat,                             &
-                                   NonSym, iStrsDep, iTimeDep, iTang, &
-                                   iAbort )
-#endif
 
 implicit none
 !arguments:
@@ -227,33 +173,14 @@ double precision, dimension(N_STRESS_VECTOR, N_STRESS_VECTOR), intent(inout):: D
 
 ! Local variables
 integer, parameter :: INT_DEBUG_LOCAL = -1
-integer:: nSub, iSub
-double precision:: GCurrent
-double precision:: dTimeCurrent, dTime
-double precision:: dSwp, dEpsV, dEpsQ, dTimeSub
-double precision, dimension(N_STRESS_VECTOR,N_STRESS_VECTOR) :: DE
-double precision, dimension(N_STRESS_VECTOR):: dSig, SigI, Sig0
-double precision, dimension(N_STRESS_VECTOR):: dEpsSub
-double precision, dimension(N_PRINCIPAL_STRESS_VECTOR):: prSigElas, prSig, prSig0
-double precision, dimension(N_PRINCIPAL_STRESS_VECTOR):: xN1, xN2, xN3
 double precision, dimension(NPARAMS):: props
-double precision, dimension(NSTATS):: stVarSub0
-double precision, dimension(N_YIELD_FUNCTIONS):: fYield, fYieldEnd
-character(len=1023):: subroutineCalled
-logical:: isConverged
 logical:: IsDebug
-logical:: restart
 
 IsDebug = setIsDebug(iEl, intPt, INT_DEBUG_LOCAL)
 
 iAbort = 0
-ipl = ELASTIC_LOADING
 
 call CheckAndCopyProps(propsI, props)
-Sig0(1:N_STRESS_VECTOR) = SigI0(1:N_STRESS_VECTOR)
-
-dTime = dTimeI
-if (dTime < TINY) dTime = 1.0d0
 
 select case (IDTask)
 case (IDTASK_INITIALISATION)
@@ -268,225 +195,15 @@ case (IDTASK_STRESS)
     call initialiseStateVariables(stVar)
     stVar0(1:NSTATS) = stVar(1:NSTATS)
   endif
+  call PerformID_TASK_STRESS(isUndr,               &
+                             iEl, intPt,           &
+                             Time0, dTimeI,        &
+                             propsI, props,        &
+                             SigI0, Swp0, stVar0,  &
+                             dEps, BulkW,          &
+                             Sig, Swp, stVar, ipl, &
+                             iAbort )
 
-  ! Fill elastic material matrix
-  GCurrent = calGRef(props)
-  call DMatrixDrained(GCurrent, props(INDEX_PROP_POISSON_UR), DE)
-
-  if (isUndr == 1) then
-    call CalculateExcessPorePressure(GCurrent,                       &
-                                     props(INDEX_PROP_POISSON_UR),   &
-                                     props(INDEX_PROP_UNDRAINED_NU), &
-                                     Swp0, getEpsV(dEps),            &
-                                     BulkW, Swp)
-    stVar(STVAR_EXCESS_PORE_PRESSURE) = Swp
-  else
-    if (props(INDEX_PROP_UNDRAINED_NU) > props(INDEX_PROP_POISSON_UR)) then
-      call CalculateExcessPorePressure(GCurrent,                       &
-                                       props(INDEX_PROP_POISSON_UR),   &
-                                       props(INDEX_PROP_UNDRAINED_NU), &
-                                       0.0d0, getEpsV(dEps),           &
-                                       BulkW, Swp)
-
-      ! calculate the effective stress
-      Sig0(1:3) = Sig0(1:3) - stVar0(STVAR_EXCESS_PORE_PRESSURE)
-    endif
-    BulkW = 0
-  endif
-
-  ! sub-stepping
-  nSub = 1
-  if (ConsiderInitialSubStepping(props)) then
-    if (CALCULATE_NSUB_BASED_ON_EPS) then
-      nSub = max(getnSubStepsBasedOnEpsq(dEps), nSub)
-    else
-      call calElasticPrincipalStress(Sig0,           &
-                                     dEps,           &
-                                     Sig, prSigElas, &
-                                     DE,             &
-                                     isDebug)
-      ! from mechanical sign to soil sign convention
-      prSigElas = -prSigElas
-      nSub = max(getnSubStepsBasedOnSigCone(props(INDEX_PROP_SIN_FRICTION_PEAK), &
-                                            props(INDEX_PROP_P_APEX),            &
-                                            prSig0,                              &
-                                            prSigElas), nSub)
-    endif
-    nSub = min(nSub, N_SUB_MAX_INITIAL)
-  endif
-
-  if (IsDebug) then
-    call WriteInDebugFile('nSub   : ' // trim(String(nSub)))
-  endif
-
-  stVarSub0(1:NSTATS) = stVar0(1:NSTATS)
-
-  restart = .true.
-  do while (restart)
-    restart = .false.
-    dTimeSub = dTime / float(nSub)
-    dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
-    SigI(1:N_STRESS_VECTOR) = Sig0(1:N_STRESS_VECTOR)
-
-    iSub = 0
-
-    dTimeCurrent = dTimeSub
-    stVar(1:NSTATS) = stVarSub0(1:NSTATS)
-
-    do while (dTimeCurrent <= dTime)
-    !do iSub= 1, nSub
-      iSub = iSub + 1
-
-      if (IsDebug) then
-        call WriteInDebugFile('iSub   :' // trim(string(iSub)))
-        call WriteInDebugFile('dEpsSub:' // trim(string(dEpsSub,1,N_STRESS_VECTOR)))
-      endif
-
-      call calPrincipalStresses(SigI, prSig0)
-
-      ! from mechanical sign to soil sign convention
-      prSig0 = -prSig0
-
-      ! elastic stress sub_increment
-      call MatrixToVectorProd(DE, dEpsSub, N_STRESS_VECTOR, dSig)
-      ! elastic stress
-      Sig(1:N_STRESS_VECTOR) = SigI(1:N_STRESS_VECTOR) + dSig(1:N_STRESS_VECTOR)
-      ! calculate principal stresses and directions
-      call calPrincipalStressesAndVectors(Sig, xN1, xN2, xN3, prSigElas)
-
-      ! from mechanical sign to soil sign convention
-      prSigElas = -prSigElas
-
-      call calStress(iStep, iEl, intPt,  &
-                     dTimeSub, GCurrent, &
-                     prSigElas, prSig0,  &
-                     props,              &
-                     stVar,              &
-                     prSig,              &
-                     fYield,             &
-                     isConverged,        &
-                     subroutineCalled )
-
-      ipl = stVar(STVAR_LOADING_TYPE)
-      stVar(STVAR_LODE_ANGLE) = -getLodeAngle(prSig)*DEGREES
-      if (CHECK_ALL_YIELD_SURFACES_CONVERGED) then
-        call checkYieldSurfaces(props, prSig, IsDebug, isConverged)
-      endif
-
-      if (.not.isConverged) then
-        ! to write debug data:
-        if (AUTOMATIC_DEBUG_FILE) then
-          IsDebug = .true.
-        endif
-        if (IsDebug) call WriteInDebugFile('GaussPoint:' // trim(string(intPt)))
-        if (nSub < N_SUB_MAX_MC .and. ConsiderSubStepping(props)) then
-          if (REPEAT_THE_WHOLE_STEP) then
-            nSub = min(UP_SCALE_FACTOR * nSub, N_SUB_MAX_MC)
-            dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
-            dEpsV = getEpsV(dEpsSub)
-            dEpsQ = getEpsQ(dEpsSub)
-            if (abs(dEpsV) >= MIN_DEPS .or. abs(dEpsQ) >= MIN_DEPS) then
-              if (IsDebug) call WriteInDebugFile('Repeat the whole step with new nSub:' // trim(string(nSub)))
-              stVarSub0(1:NSTATS) = stVar0(1:NSTATS)
-              restart = .true.
-              EXIT
-            else
-              if (IsDebug) call WriteInDebugFile('discontinue sup-stepping at step:' // trim(string(iSub)))
-            endif
-          else
-            dTimeCurrent = dTimeCurrent - dTimeSub
-            nSub = min(UP_SCALE_FACTOR * nSub, N_SUB_MAX_MC)
-            dTimeSub = dTime / float(nSub)
-            dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
-            dEpsV = getEpsV(dEpsSub)
-            dEpsQ = getEpsQ(dEpsSub)
-            if (abs(dEpsV) >= MIN_DEPS .or. abs(dEpsQ) >= MIN_DEPS) then
-              if (IsDebug) call WriteInDebugFile('continue the rest of the step with new nSub:' // trim(string(nSub)))
-              dTimeCurrent = dTimeCurrent + dTimeSub
-              stVar(1:NSTATS) = stVarSub0(1:NSTATS)
-              CYCLE
-            else
-              if (IsDebug) call WriteInDebugFile('discontinue sup-stepping at step:' // trim(string(iSub)))
-            endif
-          endif
-        endif
-
-        if (ABORT_WHEN_NOT_CONVERGED .or. WRITE_DEBUG_FILE_WHEN_NOT_CONVERGED) then
-          call calAllYieldFs(props, prSig, fYieldEnd)
-          call WriteInDebugFile('Mohr-Coulomb Model not converged',                                 ALWAYS_LEVEL)
-          call WriteInDebugFile('subroutine :' // trim(subroutineCalled),                           ALWAYS_LEVEL)
-          call WriteInDebugFile('props      :' // trim(string(propsI,1,NPARAMS)),                   ALWAYS_LEVEL)
-          call WriteInDebugFile('GaussPoint :' // trim(string(intPt)),                              ALWAYS_LEVEL)
-          call WriteInDebugFile('iEl        :' // trim(string(iEl)),                                ALWAYS_LEVEL)
-          call WriteInDebugFile('dEpsV      :' // trim(string(dEpsV)),                              ALWAYS_LEVEL)
-          call WriteInDebugFile('dEpsQ      :' // trim(string(dEpsQ)),                              ALWAYS_LEVEL)
-          call WriteInDebugFile('stVar0     :' // trim(string(stVar0, 1,NSTATS)),                   ALWAYS_LEVEL)
-          call WriteInDebugFile('stVar      :' // trim(string(stVar0, 1,NSTATS)),                   ALWAYS_LEVEL)
-          call WriteInDebugFile('dEps       :' // trim(string(dEps,   1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
-          call WriteInDebugFile('SigI0      :' // trim(string(SigI0,  1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
-          call WriteInDebugFile('dEpsSub    :' // trim(string(dEpsSub,1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
-          call WriteInDebugFile('new nSub   :' // trim(string(nSub)),                               ALWAYS_LEVEL)
-          call WriteInDebugFile('prSig      :' // trim(string(-prSig,1,N_PRINCIPAL_STRESS_VECTOR)), ALWAYS_LEVEL)
-          call WriteInDebugFile('fYield     :' // trim(string(fYield,1,N_YIELD_FUNCTIONS)),         ALWAYS_LEVEL)
-          call WriteInDebugFile('fYieldEnd  :' // trim(string(fYieldEnd,1,N_YIELD_FUNCTIONS)),      ALWAYS_LEVEL)
-          call WriteInDebugFile('lodeAngle  :' // trim(string(-getLodeAngle(prSig)*DEGREES)),       ALWAYS_LEVEL)
-          call WriteInDebugFile('isConverged:' // trim(string(isConverged)),                        ALWAYS_LEVEL)
-        endif
-
-        if (ABORT_WHEN_NOT_CONVERGED) then
-          iAbort =1
-          RETURN
-        else
-          if (IsDebug) then
-            call WriteInDebugFile('time  :' // trim(string(time0 + dTimeI)))
-            call WriteInDebugFile('p     :' // trim(string(calP(prSig))))
-            call WriteInDebugFile('q     :' // trim(string(calQ(prSig))))
-          endif
-        endif
-      endif
-
-      prSig0 = prSig
-
-      ! from soil sign to mechanical sign convention
-      prSig = -prSig
-      ! back to Cartesian stresses
-      call PrincipalStressToCartesian(prSig, xN1, xN2, xN3, sig)
-
-      dTimeCurrent = dTimeCurrent + dTimeSub
-      sigI(1:N_STRESS_VECTOR) = sig(1:N_STRESS_VECTOR)
-      stVarSub0(1:NSTATS) = stVar(1:NSTATS)
-    enddo
-  enddo
-
-  if (isUndr == 0) then
-    if (props(INDEX_PROP_UNDRAINED_NU) > props(INDEX_PROP_POISSON_UR)) then
-      stVar(STVAR_EXCESS_PORE_PRESSURE) = stVar0(STVAR_EXCESS_PORE_PRESSURE) + dSwp
-      sig(1:3) = sig(1:3) + stVar(STVAR_EXCESS_PORE_PRESSURE)
-    endif
-  endif
-
-  if (IsDebug) then
-    call calPrincipalStresses(SigI0, prSig0)
-    call calAllYieldFs(props, -prSig, fYieldEnd)
-    call WriteInDebugFile('Mohr-Coulomb Model converged')
-    call WriteInDebugFile('time       :' // trim(string(time0 + dTimeI)))
-    call WriteInDebugFile('subroutine :' // trim(subroutineCalled))
-    call WriteInDebugFile('GaussPoint :' // trim(string(intPt)))
-    call WriteInDebugFile('iEl        :' // trim(string(iEl)))
-    call WriteInDebugFile('stVar0     :' // trim(string(stVar0,  1, NSTATS)))
-    call WriteInDebugFile('stVar      :' // trim(string(stVar0,  1, NSTATS)))
-    call WriteInDebugFile('dEps       :' // trim(string(dEps,    1, N_STRESS_VECTOR)))
-    call WriteInDebugFile('SigI0      :' // trim(string(SigI0,   1, N_STRESS_VECTOR)))
-    call WriteInDebugFile('prSig0     :' // trim(string(-prSig0, 1, N_PRINCIPAL_STRESS_VECTOR)))
-    call WriteInDebugFile('prSig      :' // trim(string(-prSig,  1, N_PRINCIPAL_STRESS_VECTOR)))
-    call WriteInDebugFile('p          :' // trim(string(calP(-prSig))))
-    call WriteInDebugFile('q          :' // trim(string(calQ(-prSig))))
-    call WriteInDebugFile('lodeAngle  :' // trim(string(-getLodeAngle(-prSig)*DEGREES)))
-    call WriteInDebugFile('fYield     :' // trim(string(fYield,   1, N_YIELD_FUNCTIONS)))
-    call WriteInDebugFile('fYieldEnd  :' // trim(string(fYieldEnd,1, N_YIELD_FUNCTIONS)))
-    call WriteInDebugFile('props      :' // trim(string(propsI,   1, NPARAMS)))
-    call WriteInDebugFile('isConverged:' // trim(string(isConverged)))
-  endif
 
 case (IDTASK_DEP, IDTASK_DE)
   call calStiffnessMatrix(isUndr, BulkW, props, D)
@@ -505,6 +222,276 @@ end select
 
 end subroutine ElasticViscoPlastic
 
+!---------------------------------------------------------------------------------------------------------
+subroutine PerformID_TASK_STRESS(isUndr,               &
+                                 iEl, intPt,           &
+                                 Time0, dTimeI,        &
+                                 propsI, props,        &
+                                 SigI0, Swp0, stVar0,  &
+                                 dEps, BulkW,          &
+                                 Sig, Swp, stVar, ipl, &
+                                 iAbort )
+
+implicit none
+integer,                                         intent(in)   :: isUndr, iEl, intPt
+integer,                                         intent(out)  :: ipl, iAbort
+double precision,                                intent(in)   :: swp0, Time0, dTimeI
+double precision,                                intent(inout):: swp, BulkW
+double precision, dimension(NPARAMS),            intent(in)   :: propsI, props
+double precision, dimension(N_STRESS_VECTOR),    intent(in)   :: SigI0
+double precision, dimension(N_STRESS_VECTOR),    intent(in)   :: dEps
+double precision, dimension(N_STRESS_VECTOR),    intent(inout):: sig
+double precision, dimension(NSTATS),             intent(inout):: stVar
+double precision, dimension(NSTATS),             intent(in)   :: stVar0
+
+! local variables:
+integer, parameter :: IDTASK = IDTASK_STRESS
+integer, parameter :: INT_DEBUG_LOCAL = -1
+integer :: nSub, iSub
+double precision :: GCurrent
+double precision :: dTimeCurrent, dTime
+double precision :: dSwp, dEpsV, dEpsQ, dTimeSub
+double precision, dimension(N_STRESS_VECTOR,N_STRESS_VECTOR):: DE
+double precision, dimension(N_STRESS_VECTOR):: dSig, SigI, Sig0
+double precision, dimension(N_STRESS_VECTOR):: dEpsSub
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR):: prSigElas, prSig, prSig0
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR):: xN1, xN2, xN3
+double precision, dimension(NSTATS):: stVarSub0
+double precision, dimension(N_YIELD_FUNCTIONS):: fYield, fYieldEnd
+character(len=1023):: subroutineCalled
+logical:: isConverged
+logical:: IsDebug
+logical:: restart
+
+IsDebug = setIsDebug(iEl, intPt, INT_DEBUG_LOCAL)
+
+iAbort = 0
+ipl = ELASTIC_LOADING
+
+dTime = dTimeI
+if (dTime < TINY) dTime = 1.0d0
+
+Sig0(1:N_STRESS_VECTOR) = SigI0(1:N_STRESS_VECTOR)
+! Fill elastic material matrix
+GCurrent = calGRef(props)
+call DMatrixDrained(GCurrent, props(INDEX_PROP_POISSON_UR), DE)
+
+if (isUndr == 1) then
+  call CalculateExcessPorePressure(GCurrent,                       &
+                                   props(INDEX_PROP_POISSON_UR),   &
+                                   props(INDEX_PROP_UNDRAINED_NU), &
+                                   Swp0, getEpsV(dEps),            &
+                                   BulkW, Swp)
+  stVar(STVAR_EXCESS_PORE_PRESSURE) = Swp
+else
+  if (props(INDEX_PROP_UNDRAINED_NU) > props(INDEX_PROP_POISSON_UR)) then
+    call CalculateExcessPorePressure(GCurrent,                       &
+                                     props(INDEX_PROP_POISSON_UR),   &
+                                     props(INDEX_PROP_UNDRAINED_NU), &
+                                     0.0d0, getEpsV(dEps),           &
+                                     BulkW, Swp)
+
+    ! calculate the effective stress
+    Sig0(1:3) = Sig0(1:3) - stVar0(STVAR_EXCESS_PORE_PRESSURE)
+  endif
+  BulkW = 0
+endif
+
+! sub-stepping
+nSub = 1
+if (ConsiderInitialSubStepping(props)) then
+  if (CALCULATE_NSUB_BASED_ON_EPS) then
+    nSub = max(getnSubStepsBasedOnEpsq(dEps), nSub)
+  else
+    call calElasticPrincipalStress(Sig0,           &
+                                   dEps,           &
+                                   Sig, prSigElas, &
+                                   DE,             &
+                                   isDebug)
+    ! from mechanical sign to soil sign convention
+    prSigElas = -prSigElas
+    nSub = max(getnSubStepsBasedOnSigCone(props(INDEX_PROP_SIN_FRICTION_PEAK), &
+                                          props(INDEX_PROP_P_APEX),            &
+                                          prSig0,                              &
+                                          prSigElas), nSub)
+  endif
+  nSub = min(nSub, N_SUB_MAX_INITIAL)
+endif
+
+if (IsDebug) then
+  call WriteInDebugFile('nSub   : ' // trim(String(nSub)))
+endif
+
+stVarSub0(1:NSTATS) = stVar0(1:NSTATS)
+
+restart = .true.
+do while (restart)
+  restart = .false.
+  dTimeSub = dTime / float(nSub)
+  dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
+  SigI(1:N_STRESS_VECTOR) = Sig0(1:N_STRESS_VECTOR)
+
+  iSub = 0
+
+  dTimeCurrent = dTimeSub
+  stVar(1:NSTATS) = stVarSub0(1:NSTATS)
+
+  do while (dTimeCurrent <= dTime)
+  !do iSub= 1, nSub
+    iSub = iSub + 1
+
+    if (IsDebug) then
+      call WriteInDebugFile('iSub   :' // trim(string(iSub)))
+      call WriteInDebugFile('dEpsSub:' // trim(string(dEpsSub,1,N_STRESS_VECTOR)))
+    endif
+
+    call calPrincipalStresses(SigI, prSig0)
+
+    ! from mechanical sign to soil sign convention
+    prSig0 = -prSig0
+
+    ! elastic stress sub_increment
+    call MatrixToVectorProd(DE, dEpsSub, N_STRESS_VECTOR, dSig)
+    ! elastic stress
+    Sig(1:N_STRESS_VECTOR) = SigI(1:N_STRESS_VECTOR) + dSig(1:N_STRESS_VECTOR)
+    ! calculate principal stresses and directions
+    call calPrincipalStressesAndVectors(Sig, xN1, xN2, xN3, prSigElas)
+
+    ! from mechanical sign to soil sign convention
+    prSigElas = -prSigElas
+
+    call calStress(iEl, intPt,         &
+                   dTimeSub, GCurrent, &
+                   prSigElas, prSig0,  &
+                   props,              &
+                   stVar,              &
+                   prSig,              &
+                   fYield,             &
+                   isConverged,        &
+                   subroutineCalled )
+
+    ipl = stVar(STVAR_LOADING_TYPE)
+    stVar(STVAR_LODE_ANGLE) = -getLodeAngle(prSig)*DEGREES
+    if (CHECK_ALL_YIELD_SURFACES_CONVERGED) then
+      call checkYieldSurfaces(props, prSig, IsDebug, isConverged)
+    endif
+
+    if (.not.isConverged) then
+      ! to write debug data:
+      if (AUTOMATIC_DEBUG_FILE) then
+        IsDebug = .true.
+      endif
+      if (IsDebug) call WriteInDebugFile('GaussPoint:' // trim(string(intPt)))
+      if (nSub < N_SUB_MAX_MC .and. ConsiderSubStepping(props)) then
+        if (REPEAT_THE_WHOLE_STEP) then
+          nSub = min(UP_SCALE_FACTOR * nSub, N_SUB_MAX_MC)
+          dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
+          dEpsV = getEpsV(dEpsSub)
+          dEpsQ = getEpsQ(dEpsSub)
+          if (abs(dEpsV) >= MIN_DEPS .or. abs(dEpsQ) >= MIN_DEPS) then
+            if (IsDebug) call WriteInDebugFile('Repeat the whole step with new nSub:' // trim(string(nSub)))
+            stVarSub0(1:NSTATS) = stVar0(1:NSTATS)
+            restart = .true.
+            EXIT
+          else
+            if (IsDebug) call WriteInDebugFile('discontinue sup-stepping at step:' // trim(string(iSub)))
+          endif
+        else
+          dTimeCurrent = dTimeCurrent - dTimeSub
+          nSub = min(UP_SCALE_FACTOR * nSub, N_SUB_MAX_MC)
+          dTimeSub = dTime / float(nSub)
+          dEpsSub(1:N_STRESS_VECTOR) = dEps(1:N_STRESS_VECTOR) / float(nSub)
+          dEpsV = getEpsV(dEpsSub)
+          dEpsQ = getEpsQ(dEpsSub)
+          if (abs(dEpsV) >= MIN_DEPS .or. abs(dEpsQ) >= MIN_DEPS) then
+            if (IsDebug) call WriteInDebugFile('continue the rest of the step with new nSub:' // trim(string(nSub)))
+            dTimeCurrent = dTimeCurrent + dTimeSub
+            stVar(1:NSTATS) = stVarSub0(1:NSTATS)
+            CYCLE
+          else
+            if (IsDebug) call WriteInDebugFile('discontinue sup-stepping at step:' // trim(string(iSub)))
+          endif
+        endif
+      endif
+
+      if (ABORT_WHEN_NOT_CONVERGED .or. WRITE_DEBUG_FILE_WHEN_NOT_CONVERGED) then
+        call calAllYieldFs(props, prSig, fYieldEnd)
+        call WriteInDebugFile('Mohr-Coulomb Model not converged',                                 ALWAYS_LEVEL)
+        call WriteInDebugFile('subroutine :' // trim(subroutineCalled),                           ALWAYS_LEVEL)
+        call WriteInDebugFile('props      :' // trim(string(propsI,1,NPARAMS)),                   ALWAYS_LEVEL)
+        call WriteInDebugFile('GaussPoint :' // trim(string(intPt)),                              ALWAYS_LEVEL)
+        call WriteInDebugFile('iEl        :' // trim(string(iEl)),                                ALWAYS_LEVEL)
+        call WriteInDebugFile('dEpsV      :' // trim(string(dEpsV)),                              ALWAYS_LEVEL)
+        call WriteInDebugFile('dEpsQ      :' // trim(string(dEpsQ)),                              ALWAYS_LEVEL)
+        call WriteInDebugFile('stVar0     :' // trim(string(stVar0, 1,NSTATS)),                   ALWAYS_LEVEL)
+        call WriteInDebugFile('stVar      :' // trim(string(stVar0, 1,NSTATS)),                   ALWAYS_LEVEL)
+        call WriteInDebugFile('dEps       :' // trim(string(dEps,   1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
+        call WriteInDebugFile('SigI0      :' // trim(string(SigI0,  1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
+        call WriteInDebugFile('dEpsSub    :' // trim(string(dEpsSub,1,N_STRESS_VECTOR)),          ALWAYS_LEVEL)
+        call WriteInDebugFile('new nSub   :' // trim(string(nSub)),                               ALWAYS_LEVEL)
+        call WriteInDebugFile('prSig      :' // trim(string(-prSig,1,N_PRINCIPAL_STRESS_VECTOR)), ALWAYS_LEVEL)
+        call WriteInDebugFile('fYield     :' // trim(string(fYield,1,N_YIELD_FUNCTIONS)),         ALWAYS_LEVEL)
+        call WriteInDebugFile('fYieldEnd  :' // trim(string(fYieldEnd,1,N_YIELD_FUNCTIONS)),      ALWAYS_LEVEL)
+        call WriteInDebugFile('lodeAngle  :' // trim(string(-getLodeAngle(prSig)*DEGREES)),       ALWAYS_LEVEL)
+        call WriteInDebugFile('isConverged:' // trim(string(isConverged)),                        ALWAYS_LEVEL)
+      endif
+
+      if (ABORT_WHEN_NOT_CONVERGED) then
+        iAbort =1
+        RETURN
+      else
+        if (IsDebug) then
+          call WriteInDebugFile('time  :' // trim(string(time0 + dTimeI)))
+          call WriteInDebugFile('p     :' // trim(string(calP(prSig))))
+          call WriteInDebugFile('q     :' // trim(string(calQ(prSig))))
+        endif
+      endif
+    endif
+
+    prSig0 = prSig
+
+    ! from soil sign to mechanical sign convention
+    prSig = -prSig
+    ! back to Cartesian stresses
+    call PrincipalStressToCartesian(prSig, xN1, xN2, xN3, sig)
+
+    dTimeCurrent = dTimeCurrent + dTimeSub
+    sigI(1:N_STRESS_VECTOR) = sig(1:N_STRESS_VECTOR)
+    stVarSub0(1:NSTATS) = stVar(1:NSTATS)
+  enddo
+enddo
+
+if (isUndr == 0) then
+  if (props(INDEX_PROP_UNDRAINED_NU) > props(INDEX_PROP_POISSON_UR)) then
+    stVar(STVAR_EXCESS_PORE_PRESSURE) = stVar0(STVAR_EXCESS_PORE_PRESSURE) + dSwp
+    sig(1:3) = sig(1:3) + stVar(STVAR_EXCESS_PORE_PRESSURE)
+  endif
+endif
+
+if (IsDebug) then
+  call calPrincipalStresses(SigI0, prSig0)
+  call calAllYieldFs(props, -prSig, fYieldEnd)
+  call WriteInDebugFile('Mohr-Coulomb Model converged')
+  call WriteInDebugFile('time       :' // trim(string(time0 + dTimeI)))
+  call WriteInDebugFile('subroutine :' // trim(subroutineCalled))
+  call WriteInDebugFile('GaussPoint :' // trim(string(intPt)))
+  call WriteInDebugFile('iEl        :' // trim(string(iEl)))
+  call WriteInDebugFile('stVar0     :' // trim(string(stVar0,  1, NSTATS)))
+  call WriteInDebugFile('stVar      :' // trim(string(stVar0,  1, NSTATS)))
+  call WriteInDebugFile('dEps       :' // trim(string(dEps,    1, N_STRESS_VECTOR)))
+  call WriteInDebugFile('SigI0      :' // trim(string(SigI0,   1, N_STRESS_VECTOR)))
+  call WriteInDebugFile('prSig0     :' // trim(string(-prSig0, 1, N_PRINCIPAL_STRESS_VECTOR)))
+  call WriteInDebugFile('prSig      :' // trim(string(-prSig,  1, N_PRINCIPAL_STRESS_VECTOR)))
+  call WriteInDebugFile('p          :' // trim(string(calP(-prSig))))
+  call WriteInDebugFile('q          :' // trim(string(calQ(-prSig))))
+  call WriteInDebugFile('lodeAngle  :' // trim(string(-getLodeAngle(-prSig)*DEGREES)))
+  call WriteInDebugFile('fYield     :' // trim(string(fYield,   1, N_YIELD_FUNCTIONS)))
+  call WriteInDebugFile('fYieldEnd  :' // trim(string(fYieldEnd,1, N_YIELD_FUNCTIONS)))
+  call WriteInDebugFile('props      :' // trim(string(propsI,   1, NPARAMS)))
+  call WriteInDebugFile('isConverged:' // trim(string(isConverged)))
+endif
+
+end subroutine PerformID_TASK_STRESS
 !--------------------------------------------------------------------------------------------------
 logical function ConsiderInitialSubStepping(props) result(res)
 implicit none
@@ -610,7 +597,7 @@ call cal_dFdS(IDYieldFunc,                        &
 end subroutine getdGdS
 
 !--------------------------------------------------------------------------------------------------
-subroutine calStress(iStep, iEl, intPt, &
+subroutine calStress(iEl, intPt,        &
                      dTime, GCurrent,   &
                      prSigElas, prSig0, &
                      props,             &
@@ -621,7 +608,7 @@ subroutine calStress(iStep, iEl, intPt, &
                      subroutineCalled)
 implicit none
 
-integer, intent(in):: iStep, iEl, intPt
+integer, intent(in):: iEl, intPt
 double precision, intent(in):: dTime, GCurrent
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in)   :: prSigElas, prSig0
 double precision, dimension(NPARAMS),                   intent(in)   :: props
@@ -636,7 +623,7 @@ character(len=1023),                                    intent(out)  :: subrouti
 integer, parameter:: INT_DEBUG_LOCAL = -1
 ! yield surfaces
 integer :: IDYieldFunc
-double precision prDE(N_PRINCIPAL_STRESS_VECTOR, N_PRINCIPAL_STRESS_VECTOR)
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR, N_PRINCIPAL_STRESS_VECTOR):: prDE
 logical :: isTensile = .false.
 logical :: IsDebug = .false.
 integer :: indexActivePartMC
@@ -693,13 +680,13 @@ if (fYield(INDEX_MOHR_COULOMB_YIELD) > getTolerance(IDYieldFunc, prSig)) then
     call WriteInDebugFile('before ConeYieldSurface 692')
   endif
   call setSubroutineCalled(IsDebug, subroutineCalled, PRIMARY)
-  call ConeYieldSurface(iEl, intPt,                &
-                        dTime,                   &
-                        prDE,                    &
+  call ConeYieldSurface(iEl, intPt,        &
+                        dTime,             &
+                        prDE,              &
                         prSig0, prSigElas, &
-                        props,                   &
-                        stVar,                   &
-                        prSig,                &
+                        props,             &
+                        stVar,             &
+                        prSig,             &
                         isConverged, isTensile)
   if (IsDebug) then
     call WriteInDebugFile('after ConeYieldSurface isConverged:' // trim(String(isConverged)))
@@ -722,7 +709,7 @@ endif
 
 end subroutine calStress
 
-!-----------------------------------------------------------------------------------------------------------------------------------
+!--------------------------------------------------------------------------------------------------
 subroutine calStressInTensionArea(iEl, intPt, &
                                   dTime,      &
                                   prSigElas,  &
@@ -894,7 +881,6 @@ do while (iter < ITER_MAX .and. abs(residual) > getTolerance(IDYieldFunc, prSig)
                dFdS,                                &
                indexActivePartMC)
 
-  ! NOT TESTED:
   OverStressDFactor = calOverStressDFactor(iOverSigFunc, f, perzynaF0, rateVisco)
   dFdS = OverStressDFactor * dFdS
 
