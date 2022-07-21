@@ -5,9 +5,9 @@
 !    //    / / //       //   / /
 !   ((____/ / ((____   ((___/ /  MATERIALS
 !
+!    Copyright (c) :  Vahid Galavi
 !
-!
-!    Main authors:    Vahid Galavi
+!    Main author(s):  Vahid Galavi
 !
 module ModDebug
 use ModString
@@ -26,7 +26,8 @@ public :: CatchError
 public :: SetError
 
 ! debugging
-logical, parameter :: IS_MINOR_DEBUG = .false.
+logical, parameter :: OPEN_DEBUG_FILE = .false.
+logical, parameter :: IS_MINOR_DEBUG  = .false.
 logical, parameter :: AUTOMATIC_DEBUG_FILE = .false.
 integer, parameter :: INT_DEBUG_ALL_DATA = -1
 integer, parameter :: IEL_DEBUG_ALL_DATA = -1
@@ -68,16 +69,18 @@ integer, optional, intent(in):: FeedbackLevel
 integer level
 integer, external :: GetFeedbackLevel
 
-if (present(FeedbackLevel)) then
-  level = FeedbackLevel
-else
-  level = DEBUG_LEVEL
-endif
+if (OPEN_DEBUG_FILE) then
+  if (present(FeedbackLevel)) then
+    level = FeedbackLevel
+  else
+    level = DEBUG_LEVEL
+  endif
 
-if (level <= FEEDBACK_LEVEL) then
-  !$OMP CRITICAL
-  write (DebugUnit, fmt='(a)') trim(message)
-  !$OMP end CRITICAL
+  if (level <= FEEDBACK_LEVEL) then
+    !$OMP CRITICAL
+    write (DebugUnit, fmt='(a)') trim(message)
+    !$OMP end CRITICAL
+  endif
 endif
 
 end subroutine WriteInDebugFile
@@ -100,6 +103,7 @@ character*100 BaseName
 character*255 PrjDir, debugName
 integer i, nErr, ios
 
+if (OPEN_DEBUG_FILE) then
   if (.not.present(FileName)) then
     BaseName = 'UDSMDebug'
 
@@ -128,6 +132,7 @@ integer i, nErr, ios
   endif
 
   open(unit=DebugUnit, file= debugName)
+endif
 
 end subroutine OpenDebugFile
 
@@ -145,7 +150,7 @@ external GetParamCountInternal
 integer :: nParam = 50
 logical, save :: isOpen = .false.
 
-if (.not.isOpen) then
+if (OPEN_DEBUG_FILE .and. .not.isOpen) then
   ! open a file for debugging purposes
   call openDebugFile(iPrjDir, iPrjLen)
 

@@ -5,9 +5,9 @@
 !    //    / / //       //   / /
 !   ((____/ / ((____   ((___/ /  MATERIALS
 !
+!    Copyright (c) :  Vahid Galavi
 !
-!
-!    Main authors:    Vahid Galavi
+!    Main author(s):  Vahid Galavi
 !
 module ModStressAndStrainLibrary
 use ModGlobalConstants

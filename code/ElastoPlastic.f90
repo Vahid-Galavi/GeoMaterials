@@ -5,9 +5,9 @@
 !    //    / / //       //   / /
 !   ((____/ / ((____   ((___/ /  MATERIALS
 !
+!    Copyright (c) :  Vahid Galavi
 !
-!
-!    Main authors:    Vahid Galavi
+!    Main author(s):  Vahid Galavi
 !
 module ElasticPerfectlyPlastic_Module
 
@@ -53,6 +53,7 @@ logical, parameter:: USE_DEFAULT_PLASTIC_POTENTIAL      = .false.
 logical, parameter:: CHECK_ALL_YIELD_SURFACES_CONVERGED = .false.
 logical, parameter:: ABORT_WHEN_NOT_CONVERGED           = .true.
 logical, parameter:: WRITE_DEBUG_FILE_WHEN_NOT_CONVERGED= .false.
+logical, parameter:: UPDATE_INDEX_ACTIVE_PART_MC_PER_ITER  = .true.
 
 ! limit constants
 integer, parameter:: ITER_MAX = 100 ! MN models need more iterations. Needs to be checked!
@@ -226,7 +227,7 @@ integer:: nSub, iSub
 double precision:: GCurrent
 double precision:: dTimeCurrent, dTime
 double precision:: dSwp, dEpsV, dEpsQ, dTimeSub
-double precision, dimension(N_STRESS_VECTOR,N_STRESS_VECTOR) :: DE
+double precision, dimension(N_STRESS_VECTOR,N_STRESS_VECTOR):: DE
 double precision, dimension(N_STRESS_VECTOR):: dSig, SigI, Sig0
 double precision, dimension(N_STRESS_VECTOR):: dEpsSub
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR):: prSigElas, prSig, prSig0
@@ -821,16 +822,15 @@ isStressModified     = .false.
 
 do while (iter < ITER_MAX .and. abs(f) > getTolerance(IDYieldFunc, prSig))
   ! loop until convergence
-  if (iter > 0 .and. .not.isStressEverModified) then
+  if (USE_SEPARATED_MOHR_COULOMB_ZONES .and. iter > 0 .and. .not.isStressEverModified) then
     call CheckAndModifyPrincipalStressAtCornersMC(prSigElas, prSig, isStressModified, IsDebug)
     if (isStressModified) then
       dLamda = 0.0d0
       prSigElasMod = prSig
       isStressEverModified = .true.
+      indexActivePartMC = FindActivePart_MC(prSig)
     endif
   endif
-
-  indexActivePartMC = FindActivePart_MC(prSig)
 
   ! dGdSigma
   call getdGdS(IDYieldFunc,  &
@@ -872,8 +872,10 @@ do while (iter < ITER_MAX .and. abs(f) > getTolerance(IDYieldFunc, prSig))
     RETURN
   endif
 
+  if (UPDATE_INDEX_ACTIVE_PART_MC_PER_ITER) indexActivePartMC = FindActivePart_MC(prSig)
+
   !check yield function
-  f = calF(IDYieldFunc, prSig, props, FindActivePart_MC(prSig))
+  f = calF(IDYieldFunc, prSig, props, indexActivePartMC)
 
   if (IsDebug) then
     call WriteInDebugFile('f : ' // trim(string(f)))
@@ -967,16 +969,15 @@ endif
 
 do while (iter < ITER_MAX .and. abs(f) > getTolerance(IDYieldFunc, prSig))
   ! loop until convergence
-  if (iter > 0 .and. .not.isStressEverModified) then
+  if (USE_SEPARATED_MOHR_COULOMB_ZONES .and. iter > 0 .and. .not.isStressEverModified) then
     call CheckAndModifyPrincipalStressAtCornersMC(prSigElas, prSig, isStressModified, IsDebug)
     if (isStressModified) then
       dLamda = 0.0d0
       prSigElasMod = prSig
       isStressEverModified = .true.
+      indexActivePartMC = FindActivePart_MC(prSig)
     endif
   endif
-
-  indexActivePartMC = FindActivePart_MC(prSig)
 
   ! derivative of the plastic potential
   ! dGdSigma
@@ -1021,8 +1022,10 @@ do while (iter < ITER_MAX .and. abs(f) > getTolerance(IDYieldFunc, prSig))
     RETURN
   endif
 
+  if (UPDATE_INDEX_ACTIVE_PART_MC_PER_ITER) indexActivePartMC = FindActivePart_MC(prSig)
+
   !check yield function
-  f = calF(IDYieldFunc, prSig, props, FindActivePart_MC(prSig))
+  f = calF(IDYieldFunc, prSig, props, indexActivePartMC)
 
   if (IsDebug) then
     call WriteInDebugFile('prSig      : ' // trim(string(prSig,1,N_PRINCIPAL_STRESS_VECTOR)))
@@ -1119,13 +1122,7 @@ prSig = prSigElas
 prSigElasMod = prSig
 indexActivePartMC = FindActivePart_MC(prSig)
 
-if (USE_COUPLED_HARDENING_CROSS_POINTS) then
-  Coupling = 1.0d0
-else
-  Coupling = 0.0d0
-  Coupling(1,1) = 1.0d0
-  Coupling(2,2) = 1.0d0
-endif
+call setCouplingMatrix(N_CROSS_YIELD_SURFACES, Coupling)
 
 ! cone
 IDYieldFunc(FRICTION)     = getYieldSurfaceFunction(props)
@@ -1148,24 +1145,24 @@ do i=1,N_CROSS_YIELD_SURFACES
 enddo
 
 if (IsDebug) then
-  call WriteInDebugFile('f(i)    : ' // trim(string(f,1,2)))
-  call WriteInDebugFile('prSig   : ' // trim(string(prSig,1,N_PRINCIPAL_STRESS_VECTOR)))
+  call WriteInDebugFile('f(i)             : ' // trim(string(f,1,2)))
+  call WriteInDebugFile('prSig            : ' // trim(string(prSig,1,N_PRINCIPAL_STRESS_VECTOR)))
+  call WriteInDebugFile('indexActivePartMC: ' // trim(string(indexActivePartMC)))
 endif
 
 do while (iter < ITER_MAX .and. &
           (abs(f(FRICTION)) > getTolerance(IDYieldFunc(FRICTION), prSig) .or. &
            abs(f(TENSION) ) > getTolerance(IDYieldFunc(TENSION),  prSig)      ))
   ! loop until convergence
-  if (iter > 0 .and. .not.isStressEverModified) then
+  if (USE_SEPARATED_MOHR_COULOMB_ZONES .and. iter > 0 .and. .not.isStressEverModified) then
     call CheckAndModifyPrincipalStressAtCornersMC(prSigElas, prSig, isStressModified, IsDebug)
     if (isStressModified) then
       dLamda = 0.0d0
       prSigElasMod = prSig
-      isStressEverModified = .false.
+      isStressEverModified = .true.
+      indexActivePartMC = FindActivePart_MC(prSig)
     endif
   endif
-
-  indexActivePartMC = FindActivePart_MC(prSig)
 
   IDPotentialFunc(FRICTION) = getPotentialSurfaceFunction(IDYieldFunc(FRICTION), prSig)
 
@@ -1177,6 +1174,7 @@ do while (iter < ITER_MAX .and. &
 
   if (IsDebug) then
     call WriteInDebugFile('iter          : ' // trim(string(iter)))
+    call WriteInDebugFile('prSigElasMod  : ' // trim(string(prSigElasMod,1,N_PRINCIPAL_STRESS_VECTOR)))
     call WriteInDebugFile('dGdS(Friction): ' // trim(string(dGdS(:,1),1,N_PRINCIPAL_STRESS_VECTOR)))
     call WriteInDebugFile('dGdS(Tension) : ' // trim(string(dGdS(:,2),1,N_PRINCIPAL_STRESS_VECTOR)))
   endif
@@ -1213,14 +1211,16 @@ do while (iter < ITER_MAX .and. &
     RETURN
   endif
 
+  if (UPDATE_INDEX_ACTIVE_PART_MC_PER_ITER) indexActivePartMC = FindActivePart_MC(prSig)
+
   if (IsDebug) then
     call WriteInDebugFile('prSig       : ' // trim(string(prSig,1,N_PRINCIPAL_STRESS_VECTOR)))
+    call WriteInDebugFile('indexActivePartMC: ' // trim(string(indexActivePartMC)))
   endif
 
   !check yield function
-
   do i=1,N_CROSS_YIELD_SURFACES
-    f(i) = calF(IDYieldFunc(i), prSig, props, FindActivePart_MC(prSig))
+    f(i) = calF(IDYieldFunc(i), prSig, props, indexActivePartMC)
     if (IsDebug) then
       call WriteInDebugFile('f(i) : ' // trim(string(f(i))))
     endif
@@ -1253,6 +1253,25 @@ if (isConverged) then
 endif
 
 end subroutine ConeWithTensionYieldSurfaces
+
+!--------------------------------------------------------------------------------------------------
+subroutine setCouplingMatrix(nSize, Coupling)
+implicit none
+integer, intent(IN) :: nSize
+double precision, dimension(nSize, nSize), intent(OUT):: Coupling
+! local variables
+integer :: i
+
+if (USE_COUPLED_HARDENING_CROSS_POINTS) then
+  Coupling = 1.0d0
+else
+  Coupling = 0.0d0
+  do i=1,nSize
+    Coupling(i,i) = 1.0d0
+  enddo
+endif
+
+end subroutine setCouplingMatrix
 
 !---------------------------------------------------------------------------------------------------------
 subroutine initialiseStateVariables(stVar)
@@ -1330,7 +1349,7 @@ end select
 end function calF
 
 !--------------------------------------------------------------------------------------------------
-subroutine cal_dFdS(IDYieldFunc, &
+subroutine cal_dFdS(IDYieldFunc,  &
                     sinPhi,       &
                     prSig, props, &
                     dFdS,         &
@@ -1366,7 +1385,7 @@ case(TENSION_YIELD)
       IDYieldConeFunc == DRUCKER_PRAGER_YIELD) then
     call caldFdS_Ten_P(dFdS)
   else
-    call caldFdS_Ten(dFdS, indexActivePartMC)
+    call caldFdS_Ten(prSig, dFdS, indexActivePartMC)
   endif
 
 case(MATSUOKA_NAKAI_CONVEX_YIELD)

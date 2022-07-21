@@ -5,9 +5,9 @@
 !    //    / / //       //   / /
 !   ((____/ / ((____   ((___/ /  MATERIALS
 !
+!    Copyright (c) :  Vahid Galavi
 !
-!
-!    Main authors:    Vahid Galavi
+!    Main author(s):  Vahid Galavi
 !
 module ModSolversLibrary
 use ModMathLibrary
@@ -432,34 +432,33 @@ subroutine CheckAndModifyPrincipalStressAtCornersMC(prSigElas, prSig, isStressMo
 implicit none
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in)    :: prSigElas
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(inout) :: prSig
-logical, intent(out) :: isStressModified
+logical, intent(out):: isStressModified
 logical, intent(in) :: IsDebug
 
+! local variables:
+integer :: indexActivePartMC
 isStressModified = .false.
 
-if (prSig(2) < prSig(3)) then
-  ! Triaxial compression
-  ! sig2 = sig3
-  if (.not. (abs(prSig(2)) < SMALL .and. abs(prSig(3)) < SMALL)) then
-    prSig = prSigElas
-    prSig(2) = 0.5d0* (prSig(2) + prSig(3))
-    prSig(3) = prSig(2)
-    isStressModified = .true.
-    if (IsDebug) call WriteInDebugFile('Triaxial compression: Stress is modified for sig2 < sig3')
-  endif
+indexActivePartMC = FindActivePart_MC(prSig)
+if (IsDebug) then
+  call WriteInDebugFile('indexActivePartMC    : ' // trim(string(indexActivePartMC)))
+  call WriteInDebugFile('indexActivePartMCElas: ' // trim(string(FindActivePart_MC(prSigElas))))
 endif
 
-if (prSig(1) < prSig(2)) then
-  ! Triaxial extension
-  ! sig1 = sig2
-  if (.not. (abs(prSig(1)) < SMALL .and. abs(prSig(2)) < SMALL)) then
-    prSig = prSigElas
-    prSig(2) = 0.5d0* (prSig(2) + prSig(1))
-    prSig(1) = prSig(2)
-    isStressModified = .true.
-    if (IsDebug) call WriteInDebugFile('Triaxial extension: Stress is modified for sig1 < sig2')
-  endif
-endif
+select case(indexActivePartMC)
+case(INDEX_COULOMB_TRIAXIAL_COMP)
+  prSig = prSigElas
+  prSig(2) = 0.5d0* (prSig(2) + prSig(3))
+  prSig(3) = prSig(2)
+  isStressModified = .true.
+  if (IsDebug) call WriteInDebugFile('Triaxial compression: Stress is modified for sig2 < sig3')
+case(INDEX_COULOMB_TRIAXIAL_EXTN)
+  prSig = prSigElas
+  prSig(2) = 0.5d0* (prSig(2) + prSig(1))
+  prSig(1) = prSig(2)
+  isStressModified = .true.
+  if (IsDebug) call WriteInDebugFile('Triaxial extension: Stress is modified for sig1 < sig2')
+end select
 
 end subroutine CheckAndModifyPrincipalStressAtCornersMC
 

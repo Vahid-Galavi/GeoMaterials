@@ -5,9 +5,9 @@
 !    //    / / //       //   / /
 !   ((____/ / ((____   ((___/ /  MATERIALS
 !
+!    Copyright (c) :  Vahid Galavi
 !
-!
-!    Main authors:    Vahid Galavi
+!    Main author(s):  Vahid Galavi
 !
 module ModYieldSurfaceLibrary
 use ModMathLibrary
@@ -28,6 +28,9 @@ logical, parameter:: IS_GRIFFITH_MATSUOKA_NAKAI        = .false.
 logical, parameter:: USE_ALTERNATIVE_CAM_CLAY          = .false.
 ! Note: USE_P_TENSION_FUNCTION should be true for MN and MNC models:
 logical, parameter:: USE_P_TENSION_FUNCTION            = .false.
+logical, parameter:: USE_ALWAYS_SIG3_TENSION_FUNCTION  = .false.
+logical, parameter:: USE_ALWAYS_MIN_SIG_TENSION_FUNCTION  = .false.
+
 logical, parameter:: USE_SEPARATED_MOHR_COULOMB_ZONES  = .true.
 logical, parameter:: USE_MOHR_COULOMB_SHAPE_CAP        = .true.
 logical, parameter:: USE_NEW_F_HS_MC_FORMULA           = .false.
@@ -1217,6 +1220,10 @@ integer :: indexActivePartMC
 
 if (USE_P_TENSION_FUNCTION) then
   f = calF_Ten_P(sigTen, prSig)
+elseif (USE_ALWAYS_SIG3_TENSION_FUNCTION) then
+  f = calF_Ten_Sig3_General(sigTen, prSig)
+elseif (USE_ALWAYS_MIN_SIG_TENSION_FUNCTION) then
+  f = calF_Ten_Min_Sig(sigTen, prSig)
 else
   indexActivePartMC = INDEX_COULOMB_YIELD_GENERAL
   if (present(indexActivePartMC_I)) indexActivePartMC = indexActivePartMC_I
@@ -1235,8 +1242,9 @@ endif
 end function calF_Ten
 
 !--------------------------------------------------------------------------------------------------
-subroutine caldFdS_Ten(dFdS, indexActivePartMC_I)
+subroutine caldFdS_Ten(prSig, dFdS, indexActivePartMC_I)
 implicit none
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in) :: prSig
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(out):: dFdS
 integer, optional, intent(in) :: indexActivePartMC_I
 
@@ -1245,6 +1253,10 @@ integer :: indexActivePartMC
 
 if (USE_P_TENSION_FUNCTION) then
   call caldFdS_Ten_P(dFdS)
+elseif (USE_ALWAYS_SIG3_TENSION_FUNCTION) then
+  call caldFdS_Ten_Sig3_General(dFdS)
+elseif (USE_ALWAYS_MIN_SIG_TENSION_FUNCTION) then
+  call caldFdS_Ten_Min_Sig(prSig, dFdS)
 else
   indexActivePartMC = INDEX_COULOMB_YIELD_GENERAL
   if (present(indexActivePartMC_I)) indexActivePartMC = indexActivePartMC_I
@@ -1274,6 +1286,21 @@ dFdS(3) = -1.0d0 / 3.0d0
 end subroutine caldFdS_Ten_P
 
 !--------------------------------------------------------------------------------------------------
+subroutine caldFdS_Ten_Min_Sig(prSig, dFdS)
+implicit none
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in) :: prSig
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(out):: dFdS
+
+! local variables:
+integer :: indexMin
+
+indexMin = minloc(prSig,1)
+dFdS =  0.0d0
+dFdS(indexMin) =  -1.0d0
+
+end subroutine caldFdS_Ten_Min_Sig
+
+!--------------------------------------------------------------------------------------------------
 subroutine caldFdS_Ten_Sig3_General(dFdS)
 implicit none
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(out):: dFdS
@@ -1300,9 +1327,9 @@ subroutine caldFdS_Ten_Sig3_TxExt(dFdS)
 implicit none
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(out):: dFdS
 
-dFdS(1) = -0.5d0
-dFdS(2) = -0.5d0
-dFdS(3) =  0.0d0
+dFdS(1) =  0.0d0
+dFdS(2) =  0.0d0
+dFdS(3) = -1.0d0
 
 end subroutine caldFdS_Ten_Sig3_TxExt
 
@@ -1324,7 +1351,7 @@ implicit none
 double precision, intent(in):: sigTen
 double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in):: prSig
 
-f = sigTen - (prSig(1) + prSig(2)) * 0.5d0
+f = sigTen - prSig(3)
 
 end function calF_Ten_Sig3_TxExt
 
@@ -1338,6 +1365,22 @@ double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in):: prSig
 f = sigTen - prSig(1)
 
 end function calF_Ten_Sig1
+
+!--------------------------------------------------------------------------------------------------
+! returns f of tensile yield surfaces based on sigMin
+double precision function calF_Ten_Min_Sig(sigTen, prSig) result(f)
+implicit none
+double precision, intent(in):: sigTen
+double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(in):: prSig
+
+! local variables:
+integer :: indexMin
+
+indexMin = minloc(prSig, 1)
+
+f = sigTen - prSig(indexMin)
+
+end function calF_Ten_Min_Sig
 
 !--------------------------------------------------------------------------------------------------
 ! returns f of tensile yield surfaces based on sig3
@@ -2054,15 +2097,6 @@ vectorLength = prStressLength(dGtdS)
 dGtdS(:) = dGtdS(:) / (vectorLength + TINY)
 
 end subroutine getdGtdS
-
-!-----------------------------------------------------------------
-subroutine getdGtdSig(dGtdS)
-implicit none
-double precision, dimension(N_PRINCIPAL_STRESS_VECTOR), intent(out):: dGtdS
-
-call caldFdS_Ten(dGtdS)
-
-end subroutine getdGtdSig
 
 !-----------------------------------------------------------------
 ! derivative of f with respect to hardening parameter for Generalised Mohr-Coulomb model
